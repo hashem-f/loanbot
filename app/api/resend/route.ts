@@ -73,11 +73,17 @@ export async function POST() {
     attempts: 0,
   });
 
-  const sendResult = await sendVerificationEmail({
-    to: lead.email,
-    firstName: lead.first_name ?? "",
-    code,
-  });
+  let sendResult: Awaited<ReturnType<typeof sendVerificationEmail>>;
+  try {
+    sendResult = await sendVerificationEmail({
+      to: lead.email,
+      firstName: lead.first_name ?? "",
+      code,
+    });
+  } catch (err) {
+    console.error("sendVerificationEmail failed", err);
+    return NextResponse.json({ error: "email_send_failed" }, { status: 502 });
+  }
 
   return NextResponse.json({ ok: true, devCode: sendResult.devCode });
 }

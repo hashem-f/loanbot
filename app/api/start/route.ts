@@ -141,7 +141,13 @@ export async function POST(req: NextRequest) {
     attempts: 0,
   });
 
-  const sendResult = await sendVerificationEmail({ to: email, firstName, code });
+  let sendResult: Awaited<ReturnType<typeof sendVerificationEmail>>;
+  try {
+    sendResult = await sendVerificationEmail({ to: email, firstName, code });
+  } catch (err) {
+    console.error("sendVerificationEmail failed", err);
+    return NextResponse.json({ error: "email_send_failed" }, { status: 502 });
+  }
 
   await supabaseAdmin
     .from("sessions")

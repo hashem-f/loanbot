@@ -1,8 +1,9 @@
-// Sends the verification email via Resend when RESEND_API_KEY is set.
-// Without it, falls back to "dev mode": logs the code to the server console
-// and lets the caller return it in the API response so you can test the
-// whole flow locally before setting up a real sending domain.
-export const DEV_MODE = !process.env.RESEND_API_KEY;
+// Sends the verification email via Resend once both RESEND_API_KEY and
+// RESEND_FROM are set. Without either, falls back to "dev mode": logs the
+// code to the server console and lets the caller return it in the API
+// response so you can test the whole flow before you have a verified
+// sending domain to send from.
+export const DEV_MODE = !process.env.RESEND_API_KEY || !process.env.RESEND_FROM;
 
 export async function sendVerificationEmail(params: {
   to: string;

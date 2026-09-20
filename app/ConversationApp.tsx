@@ -117,7 +117,16 @@ export default function ConversationApp({ trackingParams }: { trackingParams: Tr
       setUiStep(data.alreadyVerified ? "questions" : "verify");
       setResendCooldown(60);
     } catch (e: unknown) {
-      setErrorMsg(e instanceof Error ? e.message : "Something went wrong.");
+      const data = (e as { data?: { error?: string } }).data;
+      if (data?.error === "rate_limited") {
+        setErrorMsg("Too many attempts from this email or address. Please try again later.");
+      } else if (data?.error === "bot_check_failed") {
+        setErrorMsg("Couldn't verify you're not a bot. Please try again.");
+      } else if (data?.error === "email_send_failed") {
+        setErrorMsg("Couldn't send the verification email. Please try again shortly.");
+      } else {
+        setErrorMsg("Something went wrong. Please try again.");
+      }
     }
   }
 
@@ -150,6 +159,7 @@ export default function ConversationApp({ trackingParams }: { trackingParams: Tr
       const data = (e as { data?: { error?: string } }).data;
       if (data?.error === "cooldown") setErrorMsg("Please wait a bit before requesting another code.");
       else if (data?.error === "too_many_codes") setErrorMsg("You've hit the resend limit for now.");
+      else if (data?.error === "email_send_failed") setErrorMsg("Couldn't send the email. Please try again shortly.");
       else setErrorMsg("Couldn't resend the code.");
     }
   }

@@ -16,64 +16,45 @@ export type Offer = {
 };
 
 export type Answers = {
-  product_type?: string; // personal_loan | credit_card | debt_consolidation | not_sure
-  amount_band?: string; // e.g. "1000-5000", "5000-15000", "15000+"
-  credit_band?: string; // excellent | good | fair | building | not_sure
-  state?: string; // two-letter state code
+  amount_band?: string; // "1000-5000" | "5000-15000" | "15000-35000" | "35000+"
+  timeline?: string; // asap | this_week | this_month | just_looking
+  state?: string; // not collected in the current flow; filtered only when present
 };
 
-const CREDIT_RANK: Record<string, number> = {
-  building: 0,
-  fair: 1,
-  good: 2,
-  excellent: 3,
-};
-
-function meetsCreditBand(offerMin: string | null, leadBand?: string): boolean {
-  if (!offerMin) return true;
-  if (!leadBand || leadBand === "not_sure") return true; // don't over-filter on uncertainty
-  const leadRank = CREDIT_RANK[leadBand] ?? 0;
-  const offerRank = CREDIT_RANK[offerMin] ?? 0;
-  return leadRank >= offerRank;
+export function parseAmountBand(band: string): number | null {
+  const nums = band.match(/\d+/g);
+  if (!nums) return null;
+  const values = nums.map(Number);
+  if (band.trim().endsWith("+")) return values[values.length - 1];
+  return values.reduce((a, b) => a + b, 0) / values.length;
 }
 
 function amountInRange(offer: Offer, amountBand?: string): boolean {
-  if (!amountBand || (offer.amount_min == null && offer.amount_max == null)) return true;
-  const approxAmount = parseAmountBand(amountBand);
-  if (approxAmount == null) return true;
-  if (offer.amount_min != null && approxAmount < offer.amount_min) return false;
-  if (offer.amount_max != null && approxAmount > offer.amount_max) return false;
+  if (!amountBand) return true;
+  if (offer.amount_min == null && offer.amount_max == null) return true;
+  const amount = parseAmountBand(amountBand);
+  if (amount == null) return true;
+  if (offer.amount_min != null && amount < offer.amount_min) return false;
+  if (offer.amount_max != null && amount > offer.amount_max) return false;
   return true;
-}
-
-function parseAmountBand(band: string): number | null {
-  const match = band.match(/\d+/g);
-  if (!match) return null;
-  const nums = match.map(Number);
-  return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
 
 export function matchOffers(offers: Offer[], answers: Answers): Offer[] {
   const eligible = offers.filter((offer) => {
     if (offer.status !== "active") return false;
 
-    const productOk =
-      !answers.product_type ||
-      answers.product_type === "not_sure" ||
-      offer.product_type === answers.product_type;
-    if (!productOk) return false;
+    // State licensing can only be enforced once a state is collected; until
+    // then, state-restricted offers are excluded rather than shown blindly.
+    if (offer.eligible_states.length > 0) {
+      if (!answers.state) return false;
+      if (!offer.eligible_states.includes(answers.state)) return false;
+    }
 
-    const stateOk =
-      offer.eligible_states.length === 0 ||
-      (!!answers.state && offer.eligible_states.includes(answers.state));
-    if (!stateOk) return false;
-
-    if (!meetsCreditBand(offer.min_credit_band, answers.credit_band)) return false;
-    if (!amountInRange(offer, answers.amount_band)) return false;
-
-    return true;
+    return amountInRange(offer, answers.amount_band);
   });
 
+  // Timeline is captured as a lead-quality signal for the buyer; it is the
+  // same for every candidate here, so it cannot affect their relative order.
   eligible.sort((a, b) => b.priority - a.priority || b.payout - a.payout);
 
   return eligible.slice(0, 3);

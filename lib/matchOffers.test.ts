@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchOffers, type Offer } from "./matchOffers";
+import { matchOffers, parseAmountBand, type Offer } from "./matchOffers";
 
 function makeOffer(overrides: Partial<Offer>): Offer {
   return {
@@ -21,56 +21,67 @@ function makeOffer(overrides: Partial<Offer>): Offer {
   };
 }
 
+describe("parseAmountBand", () => {
+  it("averages a range", () => {
+    expect(parseAmountBand("5000-15000")).toBe(10000);
+  });
+
+  it("treats a trailing + as the floor, not an average", () => {
+    expect(parseAmountBand("35000+")).toBe(35000);
+  });
+
+  it("returns null for unparseable input", () => {
+    expect(parseAmountBand("not sure")).toBeNull();
+  });
+});
+
 describe("matchOffers", () => {
   it("excludes paused offers", () => {
-    const offers = [makeOffer({ status: "paused" })];
-    expect(matchOffers(offers, {})).toHaveLength(0);
+    expect(matchOffers([makeOffer({ status: "paused" })], {})).toHaveLength(0);
   });
 
-  it("filters by product type unless the lead said not_sure", () => {
-    const offers = [
-      makeOffer({ id: "loan", product_type: "personal_loan" }),
-      makeOffer({ id: "card", product_type: "credit_card" }),
-    ];
-    expect(matchOffers(offers, { product_type: "credit_card" }).map((o) => o.id)).toEqual([
-      "card",
-    ]);
-    expect(matchOffers(offers, { product_type: "not_sure" })).toHaveLength(2);
-  });
-
-  it("excludes a lead from a state the offer doesn't serve", () => {
-    const offers = [makeOffer({ eligible_states: ["CA", "NY"] })];
-    expect(matchOffers(offers, { state: "TX" })).toHaveLength(0);
-    expect(matchOffers(offers, { state: "CA" })).toHaveLength(1);
-  });
-
-  it("requires the lead's credit band to meet the offer's minimum", () => {
-    const offers = [makeOffer({ min_credit_band: "good" })];
-    expect(matchOffers(offers, { credit_band: "building" })).toHaveLength(0);
-    expect(matchOffers(offers, { credit_band: "excellent" })).toHaveLength(1);
-    // Uncertainty shouldn't over-filter.
-    expect(matchOffers(offers, { credit_band: "not_sure" })).toHaveLength(1);
-  });
-
-  it("keeps amount within the offer's min/max range", () => {
+  it("keeps amount within the offer's range", () => {
     const offers = [makeOffer({ amount_min: 5000, amount_max: 15000 })];
     expect(matchOffers(offers, { amount_band: "1000-5000" })).toHaveLength(0);
     expect(matchOffers(offers, { amount_band: "5000-15000" })).toHaveLength(1);
   });
 
-  it("returns at most the top 3 by priority then payout", () => {
-    const offers = [
-      makeOffer({ id: "a", priority: 1 }),
-      makeOffer({ id: "b", priority: 5 }),
-      makeOffer({ id: "c", priority: 3 }),
-      makeOffer({ id: "d", priority: 10 }),
-    ];
-    const result = matchOffers(offers, {});
-    expect(result.map((o) => o.id)).toEqual(["d", "b", "c"]);
+  it("excludes an offer whose ceiling is below a 35000+ request", () => {
+    const offers = [makeOffer({ amount_min: 1000, amount_max: 35000 })];
+    expect(matchOffers(offers, { amount_band: "35000+" })).toHaveLength(1);
+    const lower = [makeOffer({ amount_min: 1000, amount_max: 20000 })];
+    expect(matchOffers(lower, { amount_band: "35000+" })).toHaveLength(0);
   });
 
-  it("returns an empty list instead of throwing when nothing qualifies", () => {
-    const offers = [makeOffer({ eligible_states: ["WY"] })];
-    expect(matchOffers(offers, { state: "CA" })).toEqual([]);
+  it("does not filter on amount when the offer has no range", () => {
+    const offers = [makeOffer({ amount_min: null, amount_max: null })];
+    expect(matchOffers(offers, { amount_band: "35000+" })).toHaveLength(1);
+  });
+
+  it("withholds state-restricted offers while no state is collected", () => {
+    const offers = [makeOffer({ eligible_states: ["CA", "NY"] })];
+    expect(matchOffers(offers, {})).toHaveLength(0);
+    expect(matchOffers(offers, { state: "CA" })).toHaveLength(1);
+    expect(matchOffers(offers, { state: "TX" })).toHaveLength(0);
+  });
+
+  it("timeline never changes eligibility", () => {
+    const offers = [makeOffer({})];
+    expect(matchOffers(offers, { timeline: "just_looking" })).toHaveLength(1);
+    expect(matchOffers(offers, { timeline: "asap" })).toHaveLength(1);
+  });
+
+  it("returns at most 3, ranked by priority then payout", () => {
+    const offers = [
+      makeOffer({ id: "a", priority: 1 }),
+      makeOffer({ id: "b", priority: 5, payout: 1 }),
+      makeOffer({ id: "c", priority: 5, payout: 99 }),
+      makeOffer({ id: "d", priority: 10 }),
+    ];
+    expect(matchOffers(offers, {}).map((o) => o.id)).toEqual(["d", "c", "b"]);
+  });
+
+  it("returns an empty list rather than throwing when nothing qualifies", () => {
+    expect(matchOffers([makeOffer({ eligible_states: ["WY"] })], {})).toEqual([]);
   });
 });

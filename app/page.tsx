@@ -1,24 +1,7 @@
-import ConversationApp from "./ConversationApp";
+import { redirect } from "next/navigation";
 
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const params = await searchParams;
-  const pick = (key: string) => {
-    const v = params[key];
-    return typeof v === "string" ? v : undefined;
-  };
-
-  return (
-    <ConversationApp
-      trackingParams={{
-        brand: pick("brand"),
-        campaign: pick("campaign"),
-        src: pick("src"),
-        click_id: pick("click_id"),
-      }}
-    />
-  );
+// Real traffic arrives at /c/<token> from the outbound email. A bare visit
+// starts a session with a placeholder ref so the flow is testable directly.
+export default function HomePage() {
+  redirect("/c/direct");
 }

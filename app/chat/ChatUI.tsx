@@ -28,7 +28,7 @@ export default function ChatUI() {
   const [textDraft, setTextDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [expired, setExpired] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetch("/api/chat")
@@ -37,8 +37,12 @@ export default function ChatUI() {
       .catch(() => setExpired(true));
   }, []);
 
+  // Scroll the list itself rather than calling scrollIntoView, which walks up
+  // to whatever ancestor happens to be scrollable and fights concurrent updates.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [state, busy]);
 
   async function send(value: string) {
@@ -82,7 +86,7 @@ export default function ChatUI() {
 
   return (
     <Shell>
-      <div className="flex-1 overflow-y-auto">
+      <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <div className="mx-auto w-full max-w-lg space-y-2.5 px-4 py-6">
           {state.messages.map((m) => (
             <div
@@ -141,11 +145,10 @@ export default function ChatUI() {
             </div>
           )}
 
-          <div ref={bottomRef} />
         </div>
       </div>
 
-      <div className="border-t border-line bg-surface">
+      <div className="shrink-0 border-t border-line bg-surface">
         <div className="mx-auto w-full max-w-lg px-4 py-4">
           {input.type === "choice" && (
             <div className="space-y-3">
@@ -243,10 +246,14 @@ export default function ChatUI() {
   );
 }
 
+// h-dvh + overflow-hidden keeps the shell exactly one viewport tall, so the
+// message list is the only scrollable region and the composer stays pinned.
+// With min-h-dvh the container grew with its content, the inner overflow never
+// engaged, and the document scrolled instead.
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-dvh flex-col bg-canvas">
-      <header className="sticky top-0 z-10 border-b border-line bg-surface">
+    <div className="flex h-dvh flex-col overflow-hidden bg-canvas">
+      <header className="shrink-0 border-b border-line bg-surface">
         <div className="mx-auto flex w-full max-w-lg items-center gap-3 px-4 py-3">
           <div className="grid size-9 shrink-0 place-items-center rounded-full bg-accent text-sm font-semibold text-accent-fg">
             LO

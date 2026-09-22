@@ -278,12 +278,22 @@ export async function POST(req: NextRequest) {
   const step = getStep(session.step);
   if (!step) return buildState(session); // done or rejected: nothing to advance
 
+  // Tapping a bubble posts the option's value; echo the label back so the
+  // transcript reads the way the user experienced it.
+  const preResolved = step.type === "choice" ? resolveChoice(step, raw) : null;
+  let displayText = raw;
+  if (step.type === "choice" && preResolved) {
+    displayText = step.options.find((o) => o.value === preResolved)?.label ?? raw;
+  } else if (step.type === "consent" && raw === "accept") {
+    displayText = "I agree";
+  }
+
   await supabaseAdmin
     .from("messages")
-    .insert({ session_id: session.id, role: "user", content: raw, step_key: step.key });
+    .insert({ session_id: session.id, role: "user", content: displayText, step_key: step.key });
 
   if (step.type === "choice") {
-    let value = resolveChoice(step, raw);
+    let value = preResolved;
 
     if (!value) {
       const assist = await assistTurn(session, step.prompt, step.options, raw);

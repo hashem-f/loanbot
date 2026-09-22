@@ -38,8 +38,8 @@ export default function ChatUI() {
   }, []);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [state]);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [state, busy]);
 
   async function send(value: string) {
     if (busy) return;
@@ -58,38 +58,42 @@ export default function ChatUI() {
 
   if (expired) {
     return (
-      <main className="flex-1 flex items-center justify-center p-6 bg-gray-50">
-        <p className="text-gray-600 text-sm max-w-sm text-center">
-          This conversation isn&apos;t active. Please open the link from your email again.
-        </p>
-      </main>
+      <Shell>
+        <div className="flex flex-1 items-center justify-center px-6">
+          <p className="max-w-sm text-center text-sm text-muted">
+            This conversation isn&apos;t active. Please open the link from your email again.
+          </p>
+        </div>
+      </Shell>
     );
   }
 
   if (!state) {
     return (
-      <main className="flex-1 flex items-center justify-center bg-gray-50">
-        <p className="text-gray-400 text-sm">Loading…</p>
-      </main>
+      <Shell>
+        <div className="flex flex-1 items-center justify-center">
+          <Dots />
+        </div>
+      </Shell>
     );
   }
 
   const { input } = state;
 
   return (
-    <main className="flex-1 flex flex-col bg-gray-50">
+    <Shell>
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-lg px-4 py-6 space-y-3">
+        <div className="mx-auto w-full max-w-lg space-y-2.5 px-4 py-6">
           {state.messages.map((m) => (
             <div
               key={m.id}
-              className={m.role === "user" ? "flex justify-end" : "flex justify-start"}
+              className={`rise flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
                 className={
                   m.role === "user"
-                    ? "max-w-[85%] rounded-2xl rounded-br-sm bg-black px-4 py-2 text-white"
-                    : "max-w-[85%] rounded-2xl rounded-bl-sm bg-white px-4 py-2 text-gray-900 shadow-sm"
+                    ? "max-w-[85%] rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-[15px] leading-relaxed text-accent-fg"
+                    : "max-w-[85%] rounded-2xl rounded-bl-md border border-line bg-surface px-4 py-2.5 text-[15px] leading-relaxed text-ink shadow-sm"
                 }
               >
                 {m.content}
@@ -97,28 +101,51 @@ export default function ChatUI() {
             </div>
           ))}
 
-          {state.offers.map((o) => (
-            <a
-              key={o.id}
-              href={o.url}
-              className="block rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:border-gray-400"
-            >
-              <div className="font-medium">{o.headline}</div>
-              <div className="text-sm text-gray-500">{o.brand}</div>
-              {o.terms_summary && (
-                <div className="mt-1 text-sm text-gray-600">{o.terms_summary}</div>
-              )}
-              {o.disclosure_text && (
-                <div className="mt-2 text-xs text-gray-400">{o.disclosure_text}</div>
-              )}
-            </a>
-          ))}
+          {busy && (
+            <div className="flex justify-start">
+              <div className="rounded-2xl rounded-bl-md border border-line bg-surface px-4 py-3 shadow-sm">
+                <Dots />
+              </div>
+            </div>
+          )}
+
+          {state.offers.length > 0 && (
+            <div className="space-y-2.5 pt-2">
+              {state.offers.map((o) => (
+                <a
+                  key={o.id}
+                  href={o.url}
+                  className="rise group block rounded-2xl border border-line bg-surface p-4 shadow-sm transition hover:border-accent"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs font-medium tracking-wide text-muted uppercase">
+                        {o.brand}
+                      </div>
+                      <div className="mt-1 font-semibold text-ink">{o.headline}</div>
+                      {o.terms_summary && (
+                        <div className="mt-1 text-sm text-muted">{o.terms_summary}</div>
+                      )}
+                    </div>
+                    <span className="mt-1 shrink-0 text-muted transition group-hover:translate-x-0.5 group-hover:text-accent">
+                      →
+                    </span>
+                  </div>
+                  {o.disclosure_text && (
+                    <div className="mt-3 border-t border-line pt-2 text-[11px] leading-relaxed text-muted">
+                      {o.disclosure_text}
+                    </div>
+                  )}
+                </a>
+              ))}
+            </div>
+          )}
 
           <div ref={bottomRef} />
         </div>
       </div>
 
-      <div className="border-t border-gray-200 bg-white">
+      <div className="border-t border-line bg-surface">
         <div className="mx-auto w-full max-w-lg px-4 py-4">
           {input.type === "choice" && (
             <div className="space-y-3">
@@ -128,7 +155,7 @@ export default function ChatUI() {
                     key={o.value}
                     disabled={busy}
                     onClick={() => send(o.value)}
-                    className="rounded-full border border-gray-300 px-4 py-2 text-left hover:bg-gray-50 disabled:opacity-40"
+                    className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-left text-[15px] text-ink transition hover:border-accent hover:bg-accent-soft disabled:opacity-40"
                   >
                     {o.label}
                   </button>
@@ -149,12 +176,12 @@ export default function ChatUI() {
                   value={textDraft}
                   onChange={(e) => setTextDraft(e.target.value)}
                   placeholder="or type a question…"
-                  className="flex-1 rounded-full border border-gray-200 px-4 py-2 text-sm"
+                  className="min-w-0 flex-1 rounded-xl border border-line bg-canvas px-4 py-2.5 text-sm text-ink outline-none placeholder:text-muted focus:border-accent"
                 />
                 <button
                   type="submit"
                   disabled={busy || !textDraft.trim()}
-                  className="rounded-full border border-gray-300 px-4 py-2 text-sm disabled:opacity-40"
+                  className="shrink-0 rounded-xl border border-line px-4 py-2.5 text-sm text-ink transition hover:border-accent disabled:opacity-40"
                 >
                   Send
                 </button>
@@ -177,15 +204,16 @@ export default function ChatUI() {
                 type="email"
                 inputMode="email"
                 autoComplete="email"
+                autoFocus
                 value={emailDraft}
                 onChange={(e) => setEmailDraft(e.target.value)}
                 placeholder="you@example.com"
-                className="flex-1 rounded-full border border-gray-300 px-4 py-2"
+                className="min-w-0 flex-1 rounded-xl border border-line bg-canvas px-4 py-3 text-[15px] text-ink outline-none placeholder:text-muted focus:border-accent"
               />
               <button
                 type="submit"
                 disabled={busy || !emailDraft.trim()}
-                className="rounded-full bg-black px-5 py-2 text-white disabled:opacity-40"
+                className="shrink-0 rounded-xl bg-accent px-5 py-3 text-[15px] font-medium text-accent-fg transition hover:opacity-90 disabled:opacity-40"
               >
                 Send
               </button>
@@ -196,21 +224,54 @@ export default function ChatUI() {
             <button
               disabled={busy}
               onClick={() => send("accept")}
-              className="w-full rounded-full bg-black px-4 py-2 text-white disabled:opacity-40"
+              className="w-full rounded-xl bg-accent px-4 py-3 text-[15px] font-medium text-accent-fg transition hover:opacity-90 disabled:opacity-40"
             >
               I agree — show my offers
             </button>
           )}
 
           {input.type === "none" && (
-            <p className="text-center text-xs text-gray-400">
+            <p className="text-center text-xs text-muted">
               {state.step === "rejected"
                 ? "This conversation has ended."
-                : "That's everything — your offers are above."}
+                : "That's everything — your options are above."}
             </p>
           )}
         </div>
       </div>
-    </main>
+    </Shell>
+  );
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-dvh flex-col bg-canvas">
+      <header className="sticky top-0 z-10 border-b border-line bg-surface">
+        <div className="mx-auto flex w-full max-w-lg items-center gap-3 px-4 py-3">
+          <div className="grid size-9 shrink-0 place-items-center rounded-full bg-accent text-sm font-semibold text-accent-fg">
+            LO
+          </div>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-ink">Loan Options</div>
+            <div className="text-xs text-muted">Automated assistant</div>
+          </div>
+        </div>
+      </header>
+      {children}
+    </div>
+  );
+}
+
+function Dots() {
+  return (
+    <div className="flex gap-1">
+      {[0, 150, 300].map((delay) => (
+        <span
+          key={delay}
+          className="size-1.5 animate-bounce rounded-full bg-muted"
+          style={{ animationDelay: `${delay}ms` }}
+        />
+      ))}
+    </div>
   );
 }

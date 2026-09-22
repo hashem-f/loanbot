@@ -9,6 +9,7 @@ import { scrub } from "@/lib/scrub";
 import { getConsentTerms, recordConsent } from "@/lib/consentService";
 import { matchOffers, type Answers, type Offer } from "@/lib/matchOffers";
 import { sendOfferEmail } from "@/lib/email";
+import { interpretTurn, LLM_ENABLED, MAX_LLM_CALLS_PER_SESSION } from "@/lib/llm";
 
 type SessionRow = {
   id: string;
@@ -197,6 +198,54 @@ async function runOffer(session: SessionRow, email: string): Promise<string> {
   return "done";
 }
 
+// Optional free-text assist. Returns {null, null} whenever the model is off,
+// over its per-session budget, failed, or produced something the guardrails
+// rejected — so every caller can treat it as a best-effort extra.
+async function assistTurn(
+  session: SessionRow,
+  prompt: string,
+  allowed: { value: string; label: string }[],
+  userText: string
+): Promise<{ value: string | null; reply: string | null }> {
+  if (!LLM_ENABLED) return { value: null, reply: null };
+
+  // Budget is counted from the events table rather than a session column, so
+  // this needs no migration and doubles as a usage log.
+  const { count } = await supabaseAdmin
+    .from("events")
+    .select("id", { count: "exact", head: true })
+    .eq("session_id", session.id)
+    .eq("name", "llm_call");
+
+  if ((count ?? 0) >= MAX_LLM_CALLS_PER_SESSION) {
+    return { value: null, reply: null };
+  }
+
+  const { data: recent } = await supabaseAdmin
+    .from("messages")
+    .select("role, content")
+    .eq("session_id", session.id)
+    .order("created_at", { ascending: false })
+    .limit(6);
+
+  const result = await interpretTurn({
+    prompt,
+    allowed,
+    userText,
+    recentTurns: (recent ?? []).reverse(),
+  });
+
+  await supabaseAdmin.from("events").insert({
+    session_id: session.id,
+    name: "llm_call",
+    props: {
+      outcome: result.value ? "value" : result.reply ? "reply" : "none",
+    },
+  });
+
+  return result;
+}
+
 async function loadSession(): Promise<SessionRow | null> {
   const sessionId = await getSessionCookieId();
   if (!sessionId) return null;
@@ -234,10 +283,21 @@ export async function POST(req: NextRequest) {
     .insert({ session_id: session.id, role: "user", content: raw, step_key: step.key });
 
   if (step.type === "choice") {
-    const value = resolveChoice(step, raw);
+    let value = resolveChoice(step, raw);
+
     if (!value) {
-      await say(session.id, `Sorry — pick one of these so I get it right. ${step.prompt}`, step.key);
-      return buildState(session);
+      const assist = await assistTurn(session, step.prompt, step.options, raw);
+      if (assist.value) {
+        value = assist.value;
+      } else {
+        if (assist.reply) await say(session.id, assist.reply, step.key);
+        await say(
+          session.id,
+          assist.reply ? step.prompt : `Sorry — pick one of these so I get it right. ${step.prompt}`,
+          step.key
+        );
+        return buildState(session);
+      }
     }
 
     await supabaseAdmin
@@ -258,7 +318,13 @@ export async function POST(req: NextRequest) {
 
   if (step.type === "email") {
     if (!isValidEmail(raw)) {
-      await say(session.id, "That doesn't look like a valid email — could you check it and try again?", step.key);
+      const assist = await assistTurn(session, step.prompt, [], raw);
+      if (assist.reply) {
+        await say(session.id, assist.reply, step.key);
+        await say(session.id, step.prompt, step.key);
+      } else {
+        await say(session.id, "That doesn't look like a valid email — could you check it and try again?", step.key);
+      }
       return buildState(session);
     }
 

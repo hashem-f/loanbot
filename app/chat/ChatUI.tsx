@@ -25,6 +25,7 @@ type State = { step: string; messages: Message[]; input: Input; offers: OfferCar
 export default function ChatUI() {
   const [state, setState] = useState<State | null>(null);
   const [emailDraft, setEmailDraft] = useState("");
+  const [textDraft, setTextDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [expired, setExpired] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -120,17 +121,44 @@ export default function ChatUI() {
       <div className="border-t border-gray-200 bg-white">
         <div className="mx-auto w-full max-w-lg px-4 py-4">
           {input.type === "choice" && (
-            <div className="grid gap-2">
-              {input.options.map((o) => (
+            <div className="space-y-3">
+              <div className="grid gap-2">
+                {input.options.map((o) => (
+                  <button
+                    key={o.value}
+                    disabled={busy}
+                    onClick={() => send(o.value)}
+                    className="rounded-full border border-gray-300 px-4 py-2 text-left hover:bg-gray-50 disabled:opacity-40"
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+              <form
+                className="flex gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const text = textDraft.trim();
+                  if (text) {
+                    send(text);
+                    setTextDraft("");
+                  }
+                }}
+              >
+                <input
+                  value={textDraft}
+                  onChange={(e) => setTextDraft(e.target.value)}
+                  placeholder="or type a question…"
+                  className="flex-1 rounded-full border border-gray-200 px-4 py-2 text-sm"
+                />
                 <button
-                  key={o.value}
-                  disabled={busy}
-                  onClick={() => send(o.value)}
-                  className="rounded-full border border-gray-300 px-4 py-2 text-left hover:bg-gray-50 disabled:opacity-40"
+                  type="submit"
+                  disabled={busy || !textDraft.trim()}
+                  className="rounded-full border border-gray-300 px-4 py-2 text-sm disabled:opacity-40"
                 >
-                  {o.label}
+                  Send
                 </button>
-              ))}
+              </form>
             </div>
           )}
 
